@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { registerUser } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Register() {
   const navigate = useNavigate()
+  const { register } = useAuth()
   const [formData, setFormData] = useState({
     collegeId: '',
     email: '',
@@ -20,13 +21,20 @@ export default function Register() {
     const { name, value } = e.target
     let updatedData = { ...formData, [name]: value }
     
-    // Auto-set role based on collegeId length
+    // Auto-set role based on collegeId pattern
     if (name === 'collegeId') {
-      const digitCount = value.replace(/\D/g, '').length
-      if (digitCount === 5) {
+      const upperValue = value.toUpperCase()
+      if (upperValue.includes('ADMIN') || upperValue.startsWith('ADM')) {
         updatedData.role = 'admin'
-      } else if (digitCount === 10) {
-        updatedData.role = 'student'
+      } else {
+        const digitCount = value.replace(/\D/g, '').length
+        if (digitCount === 5) {
+          updatedData.role = 'admin'
+        } else if (digitCount === 10) {
+          updatedData.role = 'student'
+        } else {
+          updatedData.role = 'student' // default to student
+        }
       }
     }
     
@@ -61,7 +69,15 @@ export default function Register() {
 
     setLoading(true)
     try {
-      await registerUser({
+      console.log('Attempting to register user with data:', {
+        collegeId: formData.collegeId,
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        role: formData.role
+      })
+      
+      await register({
         collegeId: formData.collegeId,
         email: formData.email,
         firstName: formData.firstName,
@@ -69,9 +85,12 @@ export default function Register() {
         password: formData.password,
         role: formData.role
       })
+      
+      console.log('Registration successful!')
       alert('Account created successfully! Please login.')
       navigate('/login')
     } catch (err) {
+      console.error('Registration error:', err)
       setError(err.message)
     } finally {
       setLoading(false)

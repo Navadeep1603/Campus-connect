@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listClubs, listEvents, registerForEvent } from '../../services/api'
+import { listClubs, listEvents, registerForEvent } from '../../services/apiRouter'
 import EventCard from '../../components/EventCard'
 import { useAuth } from '../../contexts/AuthContext'
 

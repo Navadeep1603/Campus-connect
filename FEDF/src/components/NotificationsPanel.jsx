@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listNotifications, markNotificationRead } from '../services/api'
+import { listNotifications, markNotificationRead } from '../services/apiRouter'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function NotificationsPanel() {

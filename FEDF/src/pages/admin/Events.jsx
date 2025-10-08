@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import EventCard from '../../components/EventCard'
-import { createEvent, deleteEvent, listClubs, listEvents, updateEvent } from '../../services/api'
+import { createEvent, deleteEvent, listClubs, listEvents, updateEvent } from '../../services/apiRouter'
 
 export default function Events() {
   const [events, setEvents] = useState([])

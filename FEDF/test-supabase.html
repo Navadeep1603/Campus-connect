@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Connection Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Supabase Connection Test</h1>
+    <div id="results"></div>
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="testAuth()">Test Auth</button>
+    <button onclick="testDatabase()">Test Database</button>
+
+    <script>
+        // Your Supabase configuration
+        const supabaseUrl = 'https://zqnfxzqkmtiarbmdduyq.supabase.co'
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxbmZ4enFrbXRpYXJibWRkdXlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk5NTAwMDUsImV4cCI6MjA3NTUyNjAwNX0.fMmEyIpcrVeKz9bYQSifxn4mtHe6hLmwEofg8avBBG8'
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+        
+        function log(message) {
+            const results = document.getElementById('results')
+            results.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>'
+            console.log(message)
+        }
+
+        async function testConnection() {
+            log('🔍 Testing basic connection...')
+            try {
+                const { data, error } = await supabase.from('profiles').select('count').limit(1)
+                if (error) {
+                    log('❌ Connection failed: ' + error.message)
+                } else {
+                    log('✅ Connection successful!')
+                }
+            } catch (err) {
+                log('❌ Connection error: ' + err.message)
+            }
+        }
+
+        async function testAuth() {
+            log('🔍 Testing authentication...')
+            try {
+                const { data, error } = await supabase.auth.signUp({
+                    email: 'test' + Date.now() + '@example.com',
+                    password: 'testpass123'
+                })
+                if (error) {
+                    log('❌ Auth failed: ' + error.message)
+                } else {
+                    log('✅ Auth signup successful!')
+                    log('User ID: ' + data.user?.id)
+                }
+            } catch (err) {
+                log('❌ Auth error: ' + err.message)
+            }
+        }
+
+        async function testDatabase() {
+            log('🔍 Testing database access...')
+            try {
+                const { data, error } = await supabase
+                    .from('clubs')
+                    .select('*')
+                    .limit(5)
+                
+                if (error) {
+                    log('❌ Database failed: ' + error.message)
+                } else {
+                    log('✅ Database access successful!')
+                    log('Found ' + data.length + ' clubs')
+                }
+            } catch (err) {
+                log('❌ Database error: ' + err.message)
+            }
+        }
+
+        // Auto-run basic test on load
+        window.onload = () => {
+            log('🚀 Starting Supabase connection tests...')
+            testConnection()
+        }
+    </script>
+</body>
+</html>

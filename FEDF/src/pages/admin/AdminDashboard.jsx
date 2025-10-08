@@ -1,7 +1,6 @@
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import Topbar from '../../components/Topbar'
-import NotificationsPanel from '../../components/NotificationsPanel'
 import { useAuth } from '../../contexts/AuthContext'
 import Events from './Events'
 import Clubs from './Clubs'
@@ -36,7 +35,6 @@ export default function AdminDashboard() {
             <Route path="reports" element={<Reports />} />
             <Route path="announcements" element={<Announcements />} />
           </Routes>
-          <NotificationsPanel />
         </main>
       </div>
     </div>

@@ -4,7 +4,7 @@ export default function Sidebar({ items, onLogout, brand = 'Campus Connect' }) {
   return (
     <aside className="fixed left-0 top-0 h-full w-[280px] bg-white border-r border-gray-200 hidden md:flex md:flex-col shadow-lg z-50">
       {/* Header with Logo */}
-      <div className="h-20 flex items-center gap-3 px-5 border-b border-gray-200 bg-gradient-to-br from-brand-600 to-brand-700">
+      <div className="h-20 flex items-center gap-3 px-5 border-b border-gray-200 bg-gradient-to-r from-brand-600 via-brand-500 to-purple-600 bg-animated-gradient">
         {/* CC Logo SVG */}
         <svg className="flex-shrink-0" viewBox="0 0 200 200" width="48" height="48">
           <defs>

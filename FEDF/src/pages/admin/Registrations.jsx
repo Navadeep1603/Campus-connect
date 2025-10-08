@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listEvents, listRegistrations, listPendingRegistrations, approveRegistration, rejectRegistration, exportCSV } from '../../services/api'
+import { listEvents, listRegistrations, listPendingRegistrations, approveRegistration, rejectRegistration } from '../../services/apiRouter'
+import { exportCSV } from '../../services/api'
 
 export default function Registrations() {
   const [events, setEvents] = useState([])

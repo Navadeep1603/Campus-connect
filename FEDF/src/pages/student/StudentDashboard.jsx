@@ -1,7 +1,6 @@
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import Topbar from '../../components/Topbar'
-import NotificationsPanel from '../../components/NotificationsPanel'
 import { useAuth } from '../../contexts/AuthContext'
 import Explore from './Explore'
 import MyActivities from './MyActivities'
@@ -33,7 +32,6 @@ export default function StudentDashboard() {
             <Route path="certificates" element={<Certificates />} />
             <Route path="feedback" element={<Feedback />} />
           </Routes>
-          <NotificationsPanel />
         </main>
       </div>
     </div>
