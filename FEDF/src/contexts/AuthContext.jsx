@@ -10,7 +10,7 @@ const AuthContext = createContext()
 const hasSupabaseConfig = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Temporary bypass for testing - set to true to use mock API instead
-const useSupabaseBypass = true
+const useSupabaseBypass = false
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)

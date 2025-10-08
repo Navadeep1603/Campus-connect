@@ -6,7 +6,7 @@ import * as mockApi from './api'
 const hasSupabaseConfig = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Bypass mode - force use of mock API for reliability
-const useSupabaseBypass = true
+const useSupabaseBypass = false
 
 // Use Supabase API if configured and not bypassed, otherwise use mock API
 const api = (hasSupabaseConfig && !useSupabaseBypass) ? supabaseApi : mockApi
