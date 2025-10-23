@@ -18,4 +18,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('📖 See SUPABASE_SETUP.md for instructions')
 }
 
+// Export Supabase client
 export const supabase = createClient(finalUrl, finalKey)
+
+// Export config check for conditional logic
+export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey)

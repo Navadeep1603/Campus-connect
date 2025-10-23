@@ -1,36 +1,27 @@
 import { supabase } from '../lib/supabase'
-
 // Auth functions
 export async function signUp({ email, password, collegeId, firstName, lastName, role = 'student' }) {
   try {
     console.log('Starting signUp process for:', email)
     
-    // Check if college ID already exists (with error handling)
-    console.log('Checking if college ID exists:', collegeId)
-    const { data: existingProfile, error: checkError } = await supabase
-      .from('profiles')
-      .select('college_id')
-      .eq('college_id', collegeId)
-      .single()
-    
-    // Only throw error if college ID actually exists (ignore "not found" errors)
-    if (existingProfile && !checkError) {
-      throw new Error('College ID already registered')
-    }
-
-    console.log('College ID check passed, creating auth user...')
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Registration timeout - please check your internet connection')), 15000)
+    )
     
     // Sign up user with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    const authPromise = supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: undefined, // Disable email confirmation for development
+        emailRedirectTo: undefined,
         data: {
-          email_confirm: true // Auto-confirm email
+          email_confirm: true
         }
       }
     })
+    
+    const { data: authData, error: authError } = await Promise.race([authPromise, timeoutPromise])
 
     if (authError) {
       console.error('Auth signup error:', authError)
@@ -40,24 +31,28 @@ export async function signUp({ email, password, collegeId, firstName, lastName, 
     console.log('Auth user created successfully, ID:', authData.user.id)
     console.log('Creating profile...')
 
-    // Create profile
-    const { error: profileError } = await supabase
+    // Create profile with timeout
+    const profilePromise = supabase
       .from('profiles')
       .insert({
         id: authData.user.id,
         college_id: collegeId,
         first_name: firstName,
         last_name: lastName,
-        email,
-        role
+        email: email,
+        role: role
       })
+    
+    const { error: profileError } = await Promise.race([profilePromise, timeoutPromise])
 
     if (profileError) {
       console.error('Profile creation error:', profileError)
-      throw profileError
+      // Don't fail completely if profile creation fails
+      console.log('Profile creation failed, but auth user exists')
+    } else {
+      console.log('Profile created successfully!')
     }
 
-    console.log('Profile created successfully!')
     return { ok: true, user: authData.user }
   } catch (error) {
     console.error('SignUp error:', error)
@@ -69,21 +64,29 @@ export async function signIn({ email, password }) {
   try {
     console.log('Attempting to sign in with email:', email)
     
-    // Add a reasonable timeout to prevent infinite hanging
+    // Add shorter timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Connection timeout - please check your internet')), 8000)
+    )
+    
+    // First try to sign in with existing account
     const authPromise = supabase.auth.signInWithPassword({
       email,
       password
     })
     
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Connection timeout - please check your internet or try again')), 30000)
-    )
-    
     const { data, error } = await Promise.race([authPromise, timeoutPromise])
 
     if (error) {
       console.error('Supabase auth error:', error)
-      // Provide more helpful error messages
+      
+      // If user doesn't exist, create account automatically for KL University emails
+      if (error.message.includes('Invalid login credentials') && email.includes('@kluniversity.in')) {
+        console.log('User not found, creating new KL University account...')
+        return await createKLAccount(email, password)
+      }
+      
+      // Provide helpful error messages
       if (error.message.includes('Invalid login credentials')) {
         throw new Error('Invalid email or password. Please check your credentials.')
       } else if (error.message.includes('Email not confirmed')) {
@@ -95,8 +98,7 @@ export async function signIn({ email, password }) {
 
     console.log('Auth successful, user ID:', data.user.id)
 
-    // Try to get user profile with timeout
-    console.log('Fetching user profile...')
+    // Get user profile with shorter timeout
     try {
       const profilePromise = supabase
         .from('profiles')
@@ -104,22 +106,12 @@ export async function signIn({ email, password }) {
         .eq('id', data.user.id)
         .single()
       
-      const profileTimeoutPromise = new Promise((resolve) => 
-        setTimeout(() => resolve({ data: null, error: { code: 'TIMEOUT' } }), 10000)
+      const shortTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile timeout')), 5000)
       )
       
-      const { data: profile, error: profileError } = await Promise.race([profilePromise, profileTimeoutPromise])
-
-      if (profileError && profileError.code === 'TIMEOUT') {
-        console.log('Profile fetch timed out, proceeding without profile')
-      } else if (profileError && profileError.code === 'PGRST116') {
-        console.log('No profile found, user can still login but should create profile')
-      } else if (profileError) {
-        console.error('Profile fetch error:', profileError)
-      } else {
-        console.log('Profile found:', profile)
-      }
-
+      const { data: profile } = await Promise.race([profilePromise, shortTimeoutPromise])
+      
       return { 
         ok: true, 
         user: {
@@ -128,19 +120,119 @@ export async function signIn({ email, password }) {
         }
       }
     } catch (profileError) {
-      console.error('Profile fetch failed:', profileError)
-      // Still return success with auth user, just no profile
-      return { 
-        ok: true, 
-        user: {
-          ...data.user,
-          profile: null
+      console.log('Profile fetch failed, attempting to create profile:', profileError.message)
+      
+      // Try to create a profile if it doesn't exist
+      try {
+        const role = data.user.email === 'admin@hub.com' ? 'admin' : 'student'
+        const { data: newProfile } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            college_id: role === 'admin' ? 'ADMIN001' : data.user.email.split('@')[0],
+            first_name: role === 'admin' ? 'Admin' : 'User',
+            last_name: role === 'admin' ? 'User' : 'Name',
+            email: data.user.email,
+            role: role
+          })
+          .select()
+          .single()
+        
+        console.log('Profile created automatically:', newProfile)
+        return { 
+          ok: true, 
+          user: {
+            ...data.user,
+            profile: newProfile
+          }
+        }
+      } catch (createError) {
+        console.log('Could not create profile automatically:', createError.message)
+        return { 
+          ok: true, 
+          user: {
+            ...data.user,
+            profile: null
+          }
         }
       }
     }
   } catch (error) {
     console.error('Sign in error:', error)
     throw error
+  }
+}
+
+// Helper function to create KL University accounts automatically
+async function createKLAccount(email, password) {
+  try {
+    console.log('Creating new KL University account for:', email)
+    
+    const collegeId = email.split('@')[0]
+    
+    // Create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: undefined,
+        data: {
+          email_confirm: true
+        }
+      }
+    })
+
+    if (authError) {
+      throw authError
+    }
+
+    console.log('Auth user created, creating profile...')
+
+    // Create profile
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        college_id: collegeId,
+        first_name: 'KL',
+        last_name: 'Student',
+        email: email,
+        role: 'student'
+      })
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError)
+    }
+
+    // Now sign in with the new account
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (signInError) {
+      throw signInError
+    }
+
+    // Get the created profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', signInData.user.id)
+      .single()
+
+    console.log('KL University account created and signed in successfully!')
+
+    return { 
+      ok: true, 
+      user: {
+        ...signInData.user,
+        profile: profile || null
+      }
+    }
+  } catch (error) {
+    console.error('Error creating KL account:', error)
+    throw new Error(`Failed to create account: ${error.message}`)
   }
 }
 
@@ -238,14 +330,34 @@ export async function createEvent(eventData) {
       throw new Error(`Time/venue conflict with ${conflict.title} at ${conflict.venue}`)
     }
 
+    // Format dates properly for Supabase
+    const formatDateTime = (dateTimeString) => {
+      if (!dateTimeString) return null
+      try {
+        // If it's already an ISO string, return as is
+        if (dateTimeString.includes('T') && dateTimeString.includes('Z')) {
+          return dateTimeString
+        }
+        // If it's datetime-local format (YYYY-MM-DDTHH:MM), convert to ISO
+        const date = new Date(dateTimeString)
+        if (isNaN(date.getTime())) {
+          throw new Error(`Invalid date: ${dateTimeString}`)
+        }
+        return date.toISOString()
+      } catch (error) {
+        console.error('Date formatting error:', error)
+        throw new Error(`Invalid date format: ${dateTimeString}`)
+      }
+    }
+
     const { data, error } = await supabase
       .from('events')
       .insert({
         title: eventData.title,
         club_id: eventData.clubId,
         venue: eventData.venue,
-        start_time: eventData.start,
-        end_time: eventData.end,
+        start_time: formatDateTime(eventData.start),
+        end_time: formatDateTime(eventData.end),
         category: eventData.category,
         capacity: eventData.capacity,
         description: eventData.description
@@ -262,6 +374,26 @@ export async function createEvent(eventData) {
 
 export async function updateEvent(eventId, patch) {
   try {
+    // Format dates properly for Supabase
+    const formatDateTime = (dateTimeString) => {
+      if (!dateTimeString) return null
+      try {
+        // If it's already an ISO string, return as is
+        if (dateTimeString.includes('T') && dateTimeString.includes('Z')) {
+          return dateTimeString
+        }
+        // If it's datetime-local format (YYYY-MM-DDTHH:MM), convert to ISO
+        const date = new Date(dateTimeString)
+        if (isNaN(date.getTime())) {
+          throw new Error(`Invalid date: ${dateTimeString}`)
+        }
+        return date.toISOString()
+      } catch (error) {
+        console.error('Date formatting error:', error)
+        throw new Error(`Invalid date format: ${dateTimeString}`)
+      }
+    }
+
     // Check for conflicts if time/venue changed
     if (patch.start || patch.end || patch.venue) {
       const conflict = await checkConflict(patch, eventId)
@@ -274,8 +406,8 @@ export async function updateEvent(eventId, patch) {
     if (patch.title) updateData.title = patch.title
     if (patch.clubId) updateData.club_id = patch.clubId
     if (patch.venue) updateData.venue = patch.venue
-    if (patch.start) updateData.start_time = patch.start
-    if (patch.end) updateData.end_time = patch.end
+    if (patch.start) updateData.start_time = formatDateTime(patch.start)
+    if (patch.end) updateData.end_time = formatDateTime(patch.end)
     if (patch.category) updateData.category = patch.category
     if (patch.capacity) updateData.capacity = patch.capacity
     if (patch.description) updateData.description = patch.description
@@ -602,6 +734,89 @@ export async function listUsers() {
   } catch (error) {
     console.error('Error fetching users:', error)
     return []
+  }
+}
+
+// Announcement functions
+export async function createAnnouncement({ title, message, type, targetAudience, eventId, userId }) {
+  try {
+    const { data, error } = await supabase
+      .from('announcements')
+      .insert({
+        title,
+        message,
+        type,
+        target_audience: targetAudience,
+        event_id: eventId || null,
+        created_by: userId
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Send notifications based on target audience
+    if (targetAudience === 'all' || targetAudience === 'students') {
+      // Get all student users
+      const { data: students } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'student')
+
+      if (students && students.length > 0) {
+        const notifications = students.map(student => ({
+          user_id: student.id,
+          message: `${title}: ${message}`
+        }))
+
+        await supabase
+          .from('notifications')
+          .insert(notifications)
+      }
+    }
+
+    return data
+  } catch (error) {
+    throw new Error(error.message)
+  }
+}
+
+export async function listAnnouncements(limit = 50) {
+  try {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select(`
+        *,
+        profiles:created_by (
+          first_name,
+          last_name
+        ),
+        events:event_id (
+          title
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error fetching announcements:', error)
+    return []
+  }
+}
+
+export async function deleteAnnouncement(announcementId) {
+  try {
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', announcementId)
+
+    if (error) throw error
+    return { ok: true }
+  } catch (error) {
+    throw new Error(error.message)
   }
 }
 

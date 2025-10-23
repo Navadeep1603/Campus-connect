@@ -1,18 +1,23 @@
 import { addMinutes, isBefore, isEqual } from 'date-fns'
 
-let _id = 1000
+let _id = 1
 const uid = () => String(_id++)
 
 // Default mock data
 const defaultDb = {
   users: [
-    { id: '1', collegeId: 'ADMIN001', name: 'Admin User', firstName: 'Admin', lastName: 'User', email: 'admin@hub.com', password: 'admin123', role: 'admin' },
-    { id: '3', collegeId: 'STU001', name: 'Student User', firstName: 'Student', lastName: 'User', email: 'student@hub.com', password: 'student123', role: 'student' },
+    { id: uid(), email: 'admin@hub.com', password: 'admin123', name: 'Admin User', role: 'admin', firstName: 'Admin', lastName: 'User', collegeId: 'ADMIN001' },
+    { id: uid(), email: 'student@hub.com', password: 'student123', name: 'John Doe', role: 'student', firstName: 'John', lastName: 'Doe', collegeId: 'STU001' },
+    { id: uid(), email: 'faculty@hub.com', password: 'faculty123', name: 'Dr. Smith', role: 'faculty', firstName: 'Dr.', lastName: 'Smith', collegeId: 'FAC001' },
+    { id: uid(), email: '2400030987@kluniversity.in', password: 'student123', name: 'Challa Navadeep', role: 'student', firstName: 'Challa', lastName: 'Navadeep', collegeId: '2400030987' },
+    { id: uid(), email: '24000@kluniversity.in', password: 'student123', name: 'Challa Navadeep', role: 'student', firstName: 'Challa', lastName: 'Navadeep', collegeId: '24000' }
   ],
   clubs: [
     { id: 'c1', name: 'Robotics Club', category: 'STEM', faculty: 'Dr. Lee', description: 'Build and program robots.' },
     { id: 'c2', name: 'Drama Society', category: 'Arts', faculty: 'Ms. Patel', description: 'Theater and performance.' },
     { id: 'c3', name: 'Eco Warriors', category: 'Community', faculty: 'Mr. Gomez', description: 'Sustainability initiatives.' },
+    { id: 'c4', name: 'Sports Club', category: 'Sports', faculty: 'Mr. Johnson', description: 'Competitive sports and fitness.' },
+    { id: 'c5', name: 'Music Club', category: 'Arts', faculty: 'Ms. Rodriguez', description: 'Music performance and appreciation.' },
   ],
   events: [
     { id: 'e1', title: 'Robotics Workshop', clubId: 'c1', venue: 'Lab A', start: new Date().toISOString(), end: addMinutes(new Date(), 90).toISOString(), category: 'Workshop', capacity: 30, attendees: [] },
@@ -25,6 +30,7 @@ const defaultDb = {
   achievements: [
     { id: 'a1', studentId: '3', title: 'Hackathon Winner', issueDate: new Date().toISOString() },
   ],
+  announcements: [],
 }
 
 // Load data from localStorage or use default
@@ -33,6 +39,30 @@ function loadDb() {
     const saved = localStorage.getItem('campus-connect-mock-db')
     if (saved) {
       const parsed = JSON.parse(saved)
+      
+      // Ensure announcements array exists
+      if (!parsed.announcements) {
+        parsed.announcements = []
+      }
+      
+      // Ensure KL University account exists in loaded data
+      const klAccount = parsed.users.find(u => u.email === '2400030987@kluniversity.in')
+      if (!klAccount) {
+        console.log('Adding missing KL University account to existing database')
+        parsed.users.push({ 
+          id: uid(), 
+          email: '2400030987@kluniversity.in', 
+          password: 'student123', 
+          name: 'Challa Navadeep', 
+          role: 'student', 
+          firstName: 'Challa', 
+          lastName: 'Navadeep', 
+          collegeId: '2400030987' 
+        })
+        // Save the updated database
+        localStorage.setItem('campus-connect-mock-db', JSON.stringify(parsed))
+      }
+      
       console.log('Loaded mock database from localStorage')
       return parsed
     }
@@ -54,7 +84,14 @@ function saveDb() {
 }
 
 // Mock data stores with persistence
-export const db = loadDb()
+export let db = loadDb()
+
+// Function to reload the database (useful after registration)
+export function reloadDb() {
+  db = loadDb()
+  console.log('Database reloaded, total users:', db.users.length)
+  return db
+}
 
 export function listClubs() { return Promise.resolve([...db.clubs]) }
 export function listEvents() { return Promise.resolve([...db.events]) }
@@ -98,11 +135,34 @@ export function createEvent(e) {
     saveDb()
     
     console.log(`Created ${students.length} notifications for new event: ${newE.title}`)
-    return Promise.resolve(newE)
   } catch (error) {
     console.error('Error creating event:', error)
     return Promise.reject(new Error(`Failed to create event: ${error.message}`))
   }
+}
+export function signIn({ email, password }) {
+  let user = db.users.find(u => u.email === email && u.password === password)
+  
+  // Auto-create KL University accounts if they don't exist
+  if (!user && email.includes('@kluniversity.in')) {
+    const collegeId = email.split('@')[0]
+    const newUser = {
+      id: uid(),
+      email: email,
+      password: password,
+      name: `KL Student ${collegeId}`,
+      role: 'student',
+      firstName: 'KL',
+      lastName: 'Student',
+      collegeId: collegeId
+    }
+    db.users.push(newUser)
+    saveDb()
+    user = newUser
+  }
+  
+  if (!user) return Promise.reject(new Error('Invalid credentials'))
+  return Promise.resolve({ ok: true, user })
 }
 export function updateEvent(eid, patch) {
   const idx = db.events.findIndex(e => e.id === eid)
@@ -268,6 +328,65 @@ export function markNotificationRead(id) {
     saveDb()
   }
   return Promise.resolve()
+}
+
+// Announcement functions
+export function createAnnouncement({ title, message, type, targetAudience, eventId, userId }) {
+  const announcement = {
+    id: uid(),
+    title,
+    message,
+    type,
+    target_audience: targetAudience,
+    event_id: eventId || null,
+    created_by: userId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+  
+  // Add profile and event info for display
+  const user = db.users.find(u => u.id === userId)
+  if (user) {
+    announcement.profiles = {
+      first_name: user.firstName,
+      last_name: user.lastName
+    }
+  }
+  
+  if (eventId) {
+    const event = db.events.find(e => e.id === eventId)
+    if (event) {
+      announcement.events = {
+        title: event.title
+      }
+    }
+  }
+  
+  db.announcements = db.announcements || []
+  db.announcements.unshift(announcement) // Add to beginning
+  
+  // Send notifications based on target audience
+  if (targetAudience === 'all' || targetAudience === 'students') {
+    const students = db.users.filter(u => u.role === 'student')
+    students.forEach(student => {
+      pushNotification(student.id, `${title}: ${message}`)
+    })
+  }
+  
+  saveDb()
+  return Promise.resolve(announcement)
+}
+
+export function listAnnouncements(limit = 50) {
+  db.announcements = db.announcements || []
+  return Promise.resolve(db.announcements.slice(0, limit))
+}
+
+export function deleteAnnouncement(announcementId) {
+  db.announcements = db.announcements || []
+  db.announcements = db.announcements.filter(a => a.id !== announcementId)
+  saveDb()
+  return Promise.resolve({ ok: true })
 }
 
 export function exportCSV(rows, filename = 'export.csv') {

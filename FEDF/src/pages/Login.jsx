@@ -103,17 +103,17 @@ export default function Login() {
               </div>
             )}
 
-            {/* Username/Email Input */}
+            {/* College ID/Email Input */}
             <div>
               <label className="text-sm font-medium text-gray-600 mb-2 block">
-                Username or email
+                Clg ID or email
               </label>
               <input
                 type="text"
                 value={emailOrId}
                 onChange={e => setEmailOrId(e.target.value)}
                 className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:border-brand-500 focus:ring-2 focus:ring-brand-200 transition-all outline-none"
-                placeholder="johnsmith007"
+                placeholder="2400030987 or email@kluniversity.in"
                 required
               />
             </div>

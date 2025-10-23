@@ -174,7 +174,7 @@ export default function Register() {
 
           <div className="space-y-5">
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">College ID *</label>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">Clg ID *</label>
               <input 
                 type="text" 
                 name="collegeId"

@@ -12,19 +12,19 @@ import Announcements from './Announcements'
 export default function AdminDashboard() {
   const { logout } = useAuth()
   const items = [
-    { to: '/admin/events', label: 'Events' },
-    { to: '/admin/clubs', label: 'Clubs' },
-    { to: '/admin/calendar', label: 'Calendar' },
-    { to: '/admin/registrations', label: 'Registrations' },
-    { to: '/admin/reports', label: 'Reports' },
-    { to: '/admin/announcements', label: 'Announcements' },
+    { to: '/admin/events', label: 'Events', icon: '📅' },
+    { to: '/admin/clubs', label: 'Clubs', icon: '🏢' },
+    { to: '/admin/calendar', label: 'Calendar', icon: '📆' },
+    { to: '/admin/registrations', label: 'Registrations', icon: '📝' },
+    { to: '/admin/reports', label: 'Reports', icon: '📊' },
+    { to: '/admin/announcements', label: 'Announcements', icon: '📢' },
   ]
 
   return (
     <div className="min-h-screen" style={{background: 'linear-gradient(180deg, #FFF5F0 0%, #FFFFFF 100%)'}}>
-      <Sidebar items={items} onLogout={logout} />
+      <Sidebar items={items} onLogout={logout} brand="Admin Portal" />
       <div className="md:pl-[280px]">
-        <Topbar title="Admin" />
+        <Topbar title="Admin Dashboard" />
         <main className="container-page space-y-6">
           <Routes>
             <Route path="/" element={<Navigate to="events" replace />} />

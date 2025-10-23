@@ -1,16 +1,13 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { signIn, signOut, getCurrentUser, signUp } from '../services/supabaseApi'
-import { db } from '../services/api'
+import { supabase, hasSupabaseConfig } from '../lib/supabase'
+import { signIn, signUp } from '../services/supabaseApi'
+import { db, reloadDb } from '../services/api'
 
 const AuthContext = createContext()
 
-// Check if we have valid Supabase configuration
-const hasSupabaseConfig = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-
 // Temporary bypass for testing - set to true to use mock API instead
-const useSupabaseBypass = false
+const useSupabaseBypass = false  // Using Supabase cloud storage
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -21,56 +18,53 @@ export function AuthProvider({ children }) {
       // Supabase authentication
       const initializeAuth = async () => {
         try {
-          const currentUser = await getCurrentUser()
-          if (currentUser && currentUser.profile) {
-            setUser({
-              id: currentUser.id,
-              name: `${currentUser.profile.first_name} ${currentUser.profile.last_name}`,
-              email: currentUser.email,
-              role: currentUser.profile.role,
-              profile: currentUser.profile
-            })
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            setUser(user)
           }
         } catch (error) {
-          console.error('Error initializing auth:', error)
+          console.error('Auth initialization error:', error)
+          // Fallback to localStorage if Supabase fails
+          const savedUser = localStorage.getItem('campus-connect-user')
+          if (savedUser) {
+            try {
+              setUser(JSON.parse(savedUser))
+            } catch (parseError) {
+              console.error('Failed to parse saved user:', parseError)
+            }
+          }
         }
       }
-
+      
       initializeAuth()
-
-      // Listen for auth state changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          const currentUser = await getCurrentUser()
-          if (currentUser && currentUser.profile) {
-            setUser({
-              id: currentUser.id,
-              name: `${currentUser.profile.first_name} ${currentUser.profile.last_name}`,
-              email: currentUser.email,
-              role: currentUser.profile.role,
-              profile: currentUser.profile
-            })
+      
+      try {
+        const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+          setUser(session?.user ?? null)
+        })
+        
+        return () => {
+          if (subscription && typeof subscription.unsubscribe === 'function') {
+            subscription.unsubscribe()
           }
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null)
         }
-      })
-
-      return () => subscription.unsubscribe()
+      } catch (error) {
+        console.error('Failed to set up auth state change listener:', error)
+        return () => {} // Return empty cleanup function
+      }
     } else {
-      // Fallback to localStorage for mock API
-      const cached = localStorage.getItem('auth:user')
-      if (cached) setUser(JSON.parse(cached))
+      // Mock authentication - check localStorage
+      const savedUser = localStorage.getItem('campus-connect-user')
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser))
+        } catch (error) {
+          console.error('Failed to parse saved user:', error)
+          localStorage.removeItem('campus-connect-user')
+        }
+      }
     }
   }, [])
-
-  useEffect(() => {
-    if (!hasSupabaseConfig) {
-      // Only use localStorage when not using Supabase
-      if (user) localStorage.setItem('auth:user', JSON.stringify(user))
-      else localStorage.removeItem('auth:user')
-    }
-  }, [user])
 
   const login = async ({ emailOrId, password }) => {
     console.log('Login attempt started with:', emailOrId)
@@ -95,13 +89,15 @@ export function AuthProvider({ children }) {
           console.log('Redirecting to:', userRole === 'student' ? '/student' : '/admin')
           
           // Set user state before navigation
-          setUser({
+          const userObj = {
             id: result.user.id,
             name: result.user.profile ? `${result.user.profile.first_name} ${result.user.profile.last_name}` : result.user.email,
             email: result.user.email,
             role: userRole,
             profile: result.user.profile
-          })
+          }
+          setUser(userObj)
+          localStorage.setItem('campus-connect-user', JSON.stringify(userObj))
           
           navigate(userRole === 'student' ? '/student' : '/admin', { replace: true })
         } else {
@@ -115,23 +111,45 @@ export function AuthProvider({ children }) {
       // Mock API authentication
       await new Promise((r) => setTimeout(r, 400))
       
-      const found = db.users.find(u => 
+      // IMPORTANT: Reload database to get newly registered users
+      const currentDb = reloadDb()
+      console.log('Checking login against database with', currentDb.users.length, 'users')
+      
+      const found = currentDb.users.find(u => 
         (u.email === emailOrId || u.collegeId === emailOrId) && u.password === password
       )
       
+      console.log('Login attempt for:', emailOrId)
+      console.log('User found:', found ? 'Yes' : 'No')
+      if (found) {
+        console.log('Found user details:', { email: found.email, role: found.role, collegeId: found.collegeId })
+      }
+      
       if (!found) throw new Error('Invalid credentials')
       
+      // Use stored role, but validate with collegeId pattern if needed
       let userRole = found.role
-      if (found.collegeId) {
+      
+      // If role isn't set or is undefined, determine from collegeId
+      if (!userRole && found.collegeId) {
         const digitCount = found.collegeId.replace(/\D/g, '').length
-        if (digitCount === 5) {
+        if (digitCount === 5 || found.collegeId.toUpperCase().includes('ADMIN')) {
           userRole = 'admin'
         } else if (digitCount === 10) {
           userRole = 'student'
+        } else {
+          userRole = 'student' // default
         }
       }
       
-      setUser({ id: found.id, name: found.name, email: found.email, role: userRole })
+      // Ensure we have a valid role
+      if (!userRole) userRole = 'student'
+      
+      console.log('Login successful for:', found.email, 'Role:', userRole, 'College ID:', found.collegeId)
+      
+      const userObj = { id: found.id, name: found.name, email: found.email, role: userRole, collegeId: found.collegeId }
+      setUser(userObj)
+      localStorage.setItem('campus-connect-user', JSON.stringify(userObj))
       navigate(userRole === 'student' ? '/student' : '/admin', { replace: true })
     }
   }
@@ -175,36 +193,47 @@ export function AuthProvider({ children }) {
       // Save to localStorage
       try {
         localStorage.setItem('campus-connect-mock-db', JSON.stringify(db))
+        console.log('✅ User saved to localStorage successfully')
       } catch (error) {
         console.warn('Failed to save user to localStorage:', error)
       }
       
-      console.log('Mock user created:', newUser)
+      console.log('✅ Mock user created with role:', role)
+      console.log('✅ User details:', { email, collegeId, role, firstName, lastName })
+      console.log('✅ Total users in database:', db.users.length)
       
       return { ok: true, message: 'Registration successful (mock)' }
     }
   }
 
   const logout = async () => {
-    if (hasSupabaseConfig) {
+    console.log('Logout clicked')
+    
+    if (hasSupabaseConfig && !useSupabaseBypass) {
       // Supabase logout
       try {
+        console.log('Attempting Supabase logout...')
         await signOut()
         setUser(null)
+        localStorage.removeItem('campus-connect-user')
+        console.log('Supabase logout successful')
         navigate('/login', { replace: true })
       } catch (error) {
         console.error('Error signing out:', error)
         setUser(null)
+        localStorage.removeItem('campus-connect-user')
         navigate('/login', { replace: true })
       }
     } else {
       // Mock API logout
+      console.log('Mock API logout')
       setUser(null)
+      localStorage.removeItem('campus-connect-user')
       navigate('/login', { replace: true })
     }
   }
 
-  const value = useMemo(() => ({ user, login, logout, register }), [user])
+  const value = { user, login, logout, register }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

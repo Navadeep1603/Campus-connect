@@ -45,6 +45,11 @@ export const {
   markNotificationRead,
   getUnreadNotificationCount,
   
+  // Announcement functions
+  createAnnouncement,
+  listAnnouncements,
+  deleteAnnouncement,
+  
   // Other functions
   submitFeedback,
   listAchievements,
