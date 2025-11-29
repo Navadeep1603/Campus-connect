@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Login - Campus Connect</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .account { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .admin { background: #e8f5e9; }
+        .student { background: #e3f2fd; }
+        button { background: #ff6b35; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #e55a2b; }
+        .error { background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #e8f5e9; color: #2e7d32; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Campus Connect - Login Debug Tool</h1>
+    
+    <div class="error">
+        <strong>Issue:</strong> Your Supabase account (24000@kluniversity.in) is not accessible because we switched to Mock API to fix RLS errors.
+    </div>
+
+    <h2>📋 Available Mock Accounts</h2>
+    
+    <div class="account admin">
+        <h3>👨‍💼 Admin Account</h3>
+        <p><strong>Email:</strong> admin@hub.com</p>
+        <p><strong>Password:</strong> admin123</p>
+        <p><strong>Role:</strong> Admin (Full access to dashboard)</p>
+        <button onclick="testLogin('admin@hub.com', 'admin123')">Test Login</button>
+    </div>
+
+    <div class="account student">
+        <h3>🎓 Your KL University Account (Full)</h3>
+        <p><strong>Email:</strong> 2400030987@kluniversity.in</p>
+        <p><strong>Password:</strong> student123</p>
+        <p><strong>Role:</strong> Student</p>
+        <button onclick="testLogin('2400030987@kluniversity.in', 'student123')">Test Login</button>
+    </div>
+
+    <div class="account student">
+        <h3>🎓 Your KL University Account (Short)</h3>
+        <p><strong>Email:</strong> 24000@kluniversity.in</p>
+        <p><strong>Password:</strong> student123</p>
+        <p><strong>Role:</strong> Student</p>
+        <button onclick="testLogin('24000@kluniversity.in', 'student123')">Test Login</button>
+    </div>
+
+    <h2>🔑 Create Admin Account</h2>
+    <p>To get admin access, register with a 5-digit College ID:</p>
+    
+    <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <h4>Steps to Create Admin Account:</h4>
+        <ol>
+            <li>Go to <a href="https://campus-connect-dkditab4t-chas-projects-0fac7c26.vercel.app/register" target="_blank">Registration Page</a></li>
+            <li>Enter College ID: <strong>12345</strong> (any 5-digit number)</li>
+            <li>Use your email: <strong>your-email@example.com</strong></li>
+            <li>Set password: <strong>your-password</strong></li>
+            <li>You'll automatically get Admin role!</li>
+        </ol>
+    </div>
+
+    <h2>🧪 Test Different Passwords</h2>
+    <p>Try these common passwords with your email (24000@kluniversity.in):</p>
+    
+    <div>
+        <input type="email" id="testEmail" value="24000@kluniversity.in" placeholder="Your email">
+        <br>
+        <button onclick="testLogin(document.getElementById('testEmail').value, 'student123')">Try: student123</button>
+        <button onclick="testLogin(document.getElementById('testEmail').value, '123456')">Try: 123456</button>
+        <button onclick="testLogin(document.getElementById('testEmail').value, 'password')">Try: password</button>
+        <button onclick="testLogin(document.getElementById('testEmail').value, '24000')">Try: 24000</button>
+        <button onclick="testLogin(document.getElementById('testEmail').value, 'navadeep')">Try: navadeep</button>
+    </div>
+
+    <div>
+        <input type="password" id="customPassword" placeholder="Enter your password">
+        <button onclick="testLogin(document.getElementById('testEmail').value, document.getElementById('customPassword').value)">Test Custom Password</button>
+    </div>
+
+    <h2>📊 Current Database Status</h2>
+    <button onclick="showDatabase()">Show All Users</button>
+    <button onclick="clearDatabase()">Clear Database & Reset</button>
+    
+    <div id="result"></div>
+
+    <script>
+        function testLogin(email, password) {
+            const resultDiv = document.getElementById('result');
+            
+            // Simulate the login check
+            const mockUsers = [
+                { email: 'admin@hub.com', password: 'admin123', role: 'admin' },
+                { email: '2400030987@kluniversity.in', password: 'student123', role: 'student' },
+                { email: '24000@kluniversity.in', password: 'student123', role: 'student' },
+                { email: 'student@hub.com', password: 'student123', role: 'student' }
+            ];
+            
+            const user = mockUsers.find(u => u.email === email && u.password === password);
+            
+            if (user) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        ✅ <strong>Login Successful!</strong><br>
+                        Email: ${email}<br>
+                        Role: ${user.role}<br>
+                        <a href="https://campus-connect-dkditab4t-chas-projects-0fac7c26.vercel.app/login" target="_blank">
+                            <button>Go to Login Page</button>
+                        </a>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ❌ <strong>Login Failed!</strong><br>
+                        Email: ${email}<br>
+                        Password: ${password}<br>
+                        This combination is not in the mock database.
+                    </div>
+                `;
+            }
+        }
+
+        function showDatabase() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                    <h3>📋 Current Mock Database Users:</h3>
+                    <ul>
+                        <li><strong>admin@hub.com</strong> / admin123 (Admin)</li>
+                        <li><strong>2400030987@kluniversity.in</strong> / student123 (Student)</li>
+                        <li><strong>24000@kluniversity.in</strong> / student123 (Student)</li>
+                        <li><strong>student@hub.com</strong> / student123 (Student)</li>
+                    </ul>
+                    <p><em>Note: These are stored in localStorage, not Supabase cloud.</em></p>
+                </div>
+            `;
+        }
+
+        function clearDatabase() {
+            if (confirm('This will clear all local data. Continue?')) {
+                localStorage.removeItem('campus-connect-mock-db');
+                localStorage.removeItem('campus-connect-user');
+                document.getElementById('result').innerHTML = `
+                    <div class="success">
+                        ✅ Database cleared! Refresh the main app to reset to defaults.
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
