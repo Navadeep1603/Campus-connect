@@ -51,6 +51,38 @@ export async function signUp({ email, password, collegeId, firstName, lastName, 
       console.log('Profile creation failed, but auth user exists')
     } else {
       console.log('Profile created successfully!')
+      
+      // Send notification to all admins about new student registration
+      if (role === 'student') {
+        try {
+          console.log('📢 Sending registration notification to admins')
+          const { data: admins, error: adminError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'admin')
+
+          if (!adminError && admins && admins.length > 0) {
+            const notifications = admins.map(admin => ({
+              user_id: admin.id,
+              message: `👤 New student registered: ${firstName} ${lastName} (${email})`,
+              read: false
+            }))
+
+            const { error: notifError } = await supabase
+              .from('notifications')
+              .insert(notifications)
+
+            if (notifError) {
+              console.error('⚠️ Error creating admin notifications:', notifError)
+            } else {
+              console.log(`✅ Notified ${admins.length} admins about new student registration`)
+            }
+          }
+        } catch (notifError) {
+          console.error('❌ Admin notification failed:', notifError)
+          // Don't fail registration if notification fails
+        }
+      }
     }
 
     return { ok: true, user: authData.user }
@@ -202,6 +234,28 @@ async function createKLAccount(email, password) {
 
     if (profileError) {
       console.error('Profile creation error:', profileError)
+    } else {
+      // Notify admins about new KL University student
+      try {
+        console.log('📢 Notifying admins about KL University student')
+        const { data: admins } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'admin')
+
+        if (admins && admins.length > 0) {
+          const notifications = admins.map(admin => ({
+            user_id: admin.id,
+            message: `👤 New KL University student: ${email}`,
+            read: false
+          }))
+
+          await supabase.from('notifications').insert(notifications)
+          console.log(`✅ Notified ${admins.length} admins about KL student`)
+        }
+      } catch (err) {
+        console.error('⚠️ Failed to notify admins:', err)
+      }
     }
 
     // Now sign in with the new account
@@ -333,12 +387,26 @@ export async function createEvent(eventData) {
     // Format dates properly for Supabase
     const formatDateTime = (dateTimeString) => {
       if (!dateTimeString) return null
+      
       try {
-        // If it's already an ISO string, return as is
-        if (dateTimeString.includes('T') && dateTimeString.includes('Z')) {
+        // If it's already an ISO string with Z, return as is
+        if (typeof dateTimeString === 'string' && dateTimeString.includes('T') && dateTimeString.includes('Z')) {
           return dateTimeString
         }
-        // If it's datetime-local format (YYYY-MM-DDTHH:MM), convert to ISO
+        
+        // If it's datetime-local format (YYYY-MM-DDTHH:MM) without timezone
+        if (typeof dateTimeString === 'string' && dateTimeString.includes('T')) {
+          // Append seconds if missing
+          const withSeconds = dateTimeString.length === 16 ? `${dateTimeString}:00` : dateTimeString
+          const date = new Date(withSeconds)
+          if (isNaN(date.getTime())) {
+            console.error('Invalid date:', dateTimeString)
+            throw new Error(`Invalid date: ${dateTimeString}`)
+          }
+          return date.toISOString()
+        }
+        
+        // Try to parse as regular date
         const date = new Date(dateTimeString)
         if (isNaN(date.getTime())) {
           throw new Error(`Invalid date: ${dateTimeString}`)
@@ -366,6 +434,61 @@ export async function createEvent(eventData) {
       .single()
 
     if (error) throw error
+
+    // Send notifications to all students about the new event
+    try {
+      console.log('📢 Creating notifications for new event:', eventData.title)
+      const { data: students, error: studentsError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'student')
+
+      if (studentsError) {
+        console.error('⚠️ Error fetching students:', studentsError)
+        // Continue even if student fetch fails
+      } else {
+        console.log('👥 Found students:', students?.length || 0, students)
+
+        if (students && students.length > 0) {
+          let eventDate = 'soon'
+          try {
+            const formattedStart = formatDateTime(eventData.start)
+            if (formattedStart) {
+              eventDate = new Date(formattedStart).toLocaleDateString()
+            }
+          } catch (err) {
+            console.warn('Could not format event date for notification:', err)
+          }
+          
+          const notifications = students.map(student => ({
+            user_id: student.id,
+            message: `🎉 New Event: ${eventData.title} on ${eventDate} at ${eventData.venue}`,
+            read: false
+          }))
+
+          console.log('📨 Preparing to insert notifications:', notifications)
+
+          const { data: insertedNotifs, error: notifError } = await supabase
+            .from('notifications')
+            .insert(notifications)
+            .select()
+
+          if (notifError) {
+            console.error('⚠️ Error inserting notifications:', notifError)
+            // Continue even if notification insert fails
+          } else {
+            console.log(`✅ Successfully created ${students.length} notifications for event: ${eventData.title}`)
+            console.log('📬 Inserted notifications:', insertedNotifs)
+          }
+        } else {
+          console.log('⚠️ No students found to notify')
+        }
+      }
+    } catch (notifError) {
+      console.error('❌ Notification creation failed, but event was created:', notifError)
+      // Don't fail event creation if notifications fail
+    }
+
     return data
   } catch (error) {
     throw new Error(error.message)
@@ -377,12 +500,26 @@ export async function updateEvent(eventId, patch) {
     // Format dates properly for Supabase
     const formatDateTime = (dateTimeString) => {
       if (!dateTimeString) return null
+      
       try {
-        // If it's already an ISO string, return as is
-        if (dateTimeString.includes('T') && dateTimeString.includes('Z')) {
+        // If it's already an ISO string with Z, return as is
+        if (typeof dateTimeString === 'string' && dateTimeString.includes('T') && dateTimeString.includes('Z')) {
           return dateTimeString
         }
-        // If it's datetime-local format (YYYY-MM-DDTHH:MM), convert to ISO
+        
+        // If it's datetime-local format (YYYY-MM-DDTHH:MM) without timezone
+        if (typeof dateTimeString === 'string' && dateTimeString.includes('T')) {
+          // Append seconds if missing
+          const withSeconds = dateTimeString.length === 16 ? `${dateTimeString}:00` : dateTimeString
+          const date = new Date(withSeconds)
+          if (isNaN(date.getTime())) {
+            console.error('Invalid date:', dateTimeString)
+            throw new Error(`Invalid date: ${dateTimeString}`)
+          }
+          return date.toISOString()
+        }
+        
+        // Try to parse as regular date
         const date = new Date(dateTimeString)
         if (isNaN(date.getTime())) {
           throw new Error(`Invalid date: ${dateTimeString}`)
@@ -465,19 +602,28 @@ export async function checkConflict(event, ignoreId = null) {
 // Registration functions
 export async function registerForEvent(eventId, studentId) {
   try {
+    console.log('🎫 Student attempting to register for event:', eventId)
+    
     // Check if already registered
-    const { data: existing } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from('event_registrations')
       .select('*')
       .eq('event_id', eventId)
       .eq('student_id', studentId)
-      .single()
+      .maybeSingle() // Use maybeSingle() instead of single() to avoid error when no row found
+
+    // Log for debugging
+    if (existing) {
+      console.log('⚠️ Existing registration found:', existing)
+    }
 
     if (existing) {
       if (existing.status === 'approved') {
-        throw new Error('Already registered')
+        throw new Error('You are already registered for this event')
       } else if (existing.status === 'pending') {
-        throw new Error('Registration pending approval')
+        throw new Error('Your registration is already pending approval')
+      } else if (existing.status === 'rejected') {
+        throw new Error('Your previous registration was rejected. Please contact admin.')
       }
     }
 
@@ -509,11 +655,18 @@ export async function registerForEvent(eventId, studentId) {
         status: 'pending'
       })
 
-    if (error) throw error
+    if (error) {
+      // Handle duplicate registration error
+      if (error.code === '23505') { // PostgreSQL unique constraint violation
+        throw new Error('You have already registered for this event')
+      }
+      throw error
+    }
 
     // Send notifications
-    await pushNotification('admin', `New registration request from student for ${event.title}`)
-    await pushNotification(studentId, `Registration request submitted for ${event.title}. Waiting for admin approval.`)
+    console.log('📢 Sending registration approval notifications')
+    await pushNotification('admin', `🎫 New event registration: Student ${studentId} wants to join "${event.title}"`)
+    await pushNotification(studentId, `⏳ Registration submitted for "${event.title}". Waiting for admin approval.`)
 
     return { ok: true, pending: true }
   } catch (error) {
@@ -523,38 +676,132 @@ export async function registerForEvent(eventId, studentId) {
 
 export async function listRegistrations() {
   try {
+    console.log('🔍 Fetching approved registrations...')
     const { data, error } = await supabase
       .from('event_registrations')
       .select(`
         *,
-        events (title, start_time),
-        profiles (first_name, last_name, college_id)
+        events:event_id (title, start_time),
+        profiles:student_id (id, first_name, last_name, college_id, email)
       `)
       .eq('status', 'approved')
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error fetching approved registrations:', error)
+      
+      // Fallback: fetch without joins
+      const { data: simpleData, error: simpleError } = await supabase
+        .from('event_registrations')
+        .select('*')
+        .eq('status', 'approved')
+      
+      if (simpleError) throw simpleError
+      
+      // Manually fetch related data
+      if (simpleData && simpleData.length > 0) {
+        for (const reg of simpleData) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, college_id, email')
+            .eq('id', reg.student_id)
+            .single()
+          
+          const { data: event } = await supabase
+            .from('events')
+            .select('title, start_time')
+            .eq('id', reg.event_id)
+            .single()
+          
+          reg.profiles = profile
+          reg.events = event
+        }
+      }
+      
+      return simpleData || []
+    }
+    
+    console.log('✅ Approved registrations found:', data?.length || 0, data)
+    console.log('✅ Sample registration:', data?.[0])
     return data || []
   } catch (error) {
-    console.error('Error fetching registrations:', error)
+    console.error('❌ Failed to fetch approved registrations:', error.message)
     return []
   }
 }
 
 export async function listPendingRegistrations() {
   try {
+    console.log('🔍 Fetching pending registrations...')
+    
+    // First try to get ALL registrations to check if table exists and is accessible
+    const { data: allData, error: allError } = await supabase
+      .from('event_registrations')
+      .select('*')
+      .limit(100)
+    
+    console.log('📊 All registrations in table:', allData?.length || 0, allData)
+    if (allError) {
+      console.error('❌ Error accessing event_registrations table:', allError)
+    }
+    
+    // Now get pending with joins
     const { data, error } = await supabase
       .from('event_registrations')
       .select(`
         *,
-        events (title, start_time),
-        profiles (first_name, last_name, college_id)
+        events:event_id (title, start_time),
+        profiles:student_id (id, first_name, last_name, college_id, email)
       `)
       .eq('status', 'pending')
+      .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error fetching pending registrations with joins:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
+      
+      // Try without joins as fallback
+      console.log('🔄 Trying without joins...')
+      const { data: simpleData, error: simpleError } = await supabase
+        .from('event_registrations')
+        .select('*')
+        .eq('status', 'pending')
+        
+      if (simpleError) {
+        console.error('❌ Simple query also failed:', simpleError)
+        throw simpleError
+      }
+      
+      // Fetch profile and event data separately
+      if (simpleData && simpleData.length > 0) {
+        for (const reg of simpleData) {
+          // Fetch profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, college_id, email')
+            .eq('id', reg.student_id)
+            .single()
+          
+          // Fetch event
+          const { data: event } = await supabase
+            .from('events')
+            .select('title, start_time')
+            .eq('id', reg.event_id)
+            .single()
+          
+          reg.profiles = profile
+          reg.events = event
+        }
+      }
+      
+      console.log('📋 Pending registrations (manual joins):', simpleData?.length || 0, simpleData)
+      return simpleData || []
+    }
+    
+    console.log('📋 Pending registrations found (with joins):', data?.length || 0, data)
+    console.log('📋 Sample registration:', data?.[0])
     return data || []
   } catch (error) {
-    console.error('Error fetching pending registrations:', error)
+    console.error('❌ Failed to fetch pending registrations:', error.message, error)
     return []
   }
 }
@@ -584,7 +831,7 @@ export async function approveRegistration(regId) {
     if (eventError) throw eventError
 
     // Notify student
-    await pushNotification(updateData.student_id, `Your registration for ${eventData.title} has been approved!`)
+    await pushNotification(updateData.student_id, `✅ Approved! You're registered for "${eventData.title}"`)
 
     return { ok: true }
   } catch (error) {
@@ -625,48 +872,97 @@ export async function rejectRegistration(regId) {
 // Notification functions
 export async function pushNotification(userId, message) {
   try {
+    console.log('📤 pushNotification called with userId:', userId, 'message:', message)
+    
     // If userId is 'admin', send to all admin users
     if (userId === 'admin') {
-      const { data: admins } = await supabase
+      const { data: admins, error: adminError } = await supabase
         .from('profiles')
         .select('id')
         .eq('role', 'admin')
 
+      console.log('👥 Found admins:', admins?.length || 0, admins?.map(a => a.id))
+      
+      if (adminError) {
+        console.error('❌ Error fetching admins:', adminError)
+        return
+      }
+
       if (admins && admins.length > 0) {
         const notifications = admins.map(admin => ({
           user_id: admin.id,
-          message
+          message,
+          read: false
         }))
 
-        await supabase
+        console.log('📨 Creating notifications for admin user_ids:', notifications.map(n => n.user_id))
+
+        const { data: inserted, error: insertError } = await supabase
           .from('notifications')
           .insert(notifications)
+          .select()
+        
+        if (insertError) {
+          console.error('❌ Error inserting admin notifications:', insertError)
+        } else {
+          console.log(`✅ Sent notification to ${admins.length} admins:`, inserted)
+        }
       }
     } else {
-      await supabase
+      console.log('📨 Creating notification for single user_id:', userId)
+      
+      const { data: inserted, error: insertError } = await supabase
         .from('notifications')
         .insert({
           user_id: userId,
-          message
+          message,
+          read: false
         })
+        .select()
+      
+      if (insertError) {
+        console.error('❌ Error inserting notification:', insertError)
+      } else {
+        console.log(`✅ Sent notification to user ${userId}:`, inserted)
+      }
     }
   } catch (error) {
-    console.error('Error sending notification:', error)
+    console.error('❌ Error in pushNotification:', error)
   }
 }
 
 export async function listNotifications(userId) {
   try {
+    console.log('🔍 Fetching notifications for user ID:', userId)
+    
+    // First check ALL notifications in table
+    const { data: allNotifs, error: allError } = await supabase
+      .from('notifications')
+      .select('*')
+      .limit(50)
+    
+    console.log('📊 Total notifications in table:', allNotifs?.length || 0)
+    if (allNotifs && allNotifs.length > 0) {
+      console.log('📋 Sample notification user_ids:', allNotifs.slice(0, 5).map(n => n.user_id))
+      console.log('🎯 Looking for user_id:', userId)
+      console.log('✅ Matches found:', allNotifs.filter(n => n.user_id === userId).length)
+    }
+    
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error fetching notifications:', error)
+      throw error
+    }
+    
+    console.log('📬 Notifications for this user:', data?.length || 0, data)
     return data || []
   } catch (error) {
-    console.error('Error fetching notifications:', error)
+    console.error('❌ Error fetching notifications:', error)
     return []
   }
 }
@@ -770,23 +1066,37 @@ export async function createAnnouncement({ title, message, type, targetAudience,
     if (error) throw error
 
     // Send notifications based on target audience
-    if (targetAudience === 'all' || targetAudience === 'students') {
-      // Get all student users
-      const { data: students } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'student')
+    try {
+      if (targetAudience === 'all' || targetAudience === 'students') {
+        console.log('📢 Creating notifications for announcement:', title)
+        const { data: students, error: studentsError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'student')
 
-      if (students && students.length > 0) {
-        const notifications = students.map(student => ({
-          user_id: student.id,
-          message: `${title}: ${message}`
-        }))
+        if (studentsError) {
+          console.error('⚠️ Error fetching students for announcement:', studentsError)
+        } else if (students && students.length > 0) {
+          const notifications = students.map(student => ({
+            user_id: student.id,
+            message: `📢 Announcement: ${title} - ${message}`,
+            read: false
+          }))
 
-        await supabase
-          .from('notifications')
-          .insert(notifications)
+          const { error: notifError } = await supabase
+            .from('notifications')
+            .insert(notifications)
+          
+          if (notifError) {
+            console.error('⚠️ Error creating announcement notifications:', notifError)
+          } else {
+            console.log(`✅ Created ${students.length} notifications for announcement: ${title}`)
+          }
+        }
       }
+    } catch (notifError) {
+      console.error('❌ Announcement notification failed:', notifError)
+      // Don't fail announcement creation if notifications fail
     }
 
     return data

@@ -29,46 +29,80 @@ export default function Topbar({ title, onOpenMenu }) {
   }
   
   return (
-    <header className="h-16 bg-white/90 backdrop-blur-lg sticky top-0 z-10 flex items-center px-6 gap-4 shadow-lg transition-all duration-500">
+    <header className="premium-topbar">
       {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-r from-brand-500/5 via-purple-500/5 to-blue-500/5 animate-pulse"></div>
+      <div className="premium-gradient-bg"></div>
       
-      {/* User Name on the left */}
-      <div className={`flex items-center transition-all duration-700 delay-100 ${
-        isLoaded ? 'translate-x-0 opacity-100' : '-translate-x-8 opacity-0'
-      }`}>
-        <h1 className="text-xl font-semibold text-gray-800">
-          {getUserDisplayName()}
-        </h1>
-      </div>
+      {/* Glassmorphism layer */}
+      <div className="premium-glass-layer"></div>
       
-      {/* Right side with search and notifications */}
-      <div className={`ml-auto flex items-center gap-4 transition-all duration-700 delay-200 ${
-        isLoaded ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
-      }`}>
-        {/* Search bar */}
-        <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-brand-400 to-purple-400 rounded-xl opacity-0 group-hover:opacity-20 transition-all duration-300 blur-sm"></div>
-          <input 
-            value={q} 
-            onChange={e=>setQ(e.target.value)} 
-            placeholder="🔍 Search..." 
-            className="relative px-4 py-2 border-2 border-gray-200 rounded-xl w-64 text-sm focus:border-brand-400 focus:ring-4 focus:ring-brand-100 transition-all duration-300 outline-none bg-white/80 backdrop-blur-sm hover:shadow-lg focus:shadow-xl transform hover:scale-105 focus:scale-105"
-          />
+      {/* Content container */}
+      <div className="premium-content">
+        {/* Mobile Menu Button */}
+        {onOpenMenu && (
+          <button 
+            onClick={onOpenMenu}
+            className="md:hidden p-2 rounded-lg hover:bg-white/10 text-white mr-2"
+            aria-label="Open menu"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
+        
+        {/* Left Section: User Name */}
+        <div className={`premium-logo-section ${
+          isLoaded ? 'loaded' : ''
+        }`}>
+          <div className="premium-user-name-left">
+            <span className="premium-user-name-bold truncate max-w-[150px] sm:max-w-none">{getUserDisplayName()}</span>
+            <span className="premium-wave-emoji">👋</span>
+          </div>
         </div>
         
-        {/* Notification bell */}
-        <div className="transform transition-all duration-300 hover:scale-110">
-          <NotificationBell />
+        {/* Center Section: Empty */}
+        <div className="premium-center-section hidden md:block"></div>
+        
+        {/* Right Section: Search + Notifications */}
+        <div className={`premium-right-section ${
+          isLoaded ? 'loaded' : ''
+        }`}>
+          {/* Premium Search Box - Hidden on mobile */}
+          <div className="premium-search-container hidden sm:flex">
+            <div className="premium-search-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+              </svg>
+            </div>
+            <input 
+              value={q} 
+              onChange={e=>setQ(e.target.value)} 
+              placeholder="Search..." 
+              className="premium-search-input"
+            />
+          </div>
+          
+          {/* Premium Notification Bell */}
+          <div className="premium-notification-wrapper">
+            <NotificationBell />
+          </div>
         </div>
       </div>
       
-      {/* Floating particles effect */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-2 left-1/4 w-1 h-1 bg-brand-400 rounded-full animate-float-1"></div>
-        <div className="absolute top-4 right-1/3 w-1 h-1 bg-purple-400 rounded-full animate-float-2"></div>
-        <div className="absolute bottom-3 left-1/2 w-1 h-1 bg-blue-400 rounded-full animate-float-3"></div>
+      {/* Premium Floating Particles */}
+      <div className="premium-particles">
+        <div className="particle particle-1"></div>
+        <div className="particle particle-2"></div>
+        <div className="particle particle-3"></div>
+        <div className="particle particle-4"></div>
+        <div className="particle particle-5"></div>
+        <div className="particle particle-6"></div>
       </div>
+      
+      {/* Bottom ambient glow */}
+      <div className="premium-bottom-glow"></div>
     </header>
   )
 }

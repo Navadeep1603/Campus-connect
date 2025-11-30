@@ -11,28 +11,60 @@ const useSupabaseBypass = false  // Using Supabase cloud storage
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
+    // Safety timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      console.warn('Auth loading timeout - forcing completion')
+      setLoading(false)
+    }, 5000)
+
     if (hasSupabaseConfig && !useSupabaseBypass) {
       // Supabase authentication
       const initializeAuth = async () => {
         try {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (user) {
-            setUser(user)
-          }
-        } catch (error) {
-          console.error('Auth initialization error:', error)
-          // Fallback to localStorage if Supabase fails
+          // First check localStorage for saved user
           const savedUser = localStorage.getItem('campus-connect-user')
           if (savedUser) {
             try {
-              setUser(JSON.parse(savedUser))
+              const parsedUser = JSON.parse(savedUser)
+              console.log('Restored user from localStorage:', parsedUser)
+              setUser(parsedUser)
+              setLoading(false)
+              return
             } catch (parseError) {
               console.error('Failed to parse saved user:', parseError)
+              localStorage.removeItem('campus-connect-user')
             }
           }
+
+          // If no saved user, check Supabase
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            // Get user profile to get role
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+            
+            const userObj = {
+              id: user.id,
+              email: user.email,
+              name: profile ? `${profile.first_name} ${profile.last_name}` : user.email,
+              role: profile?.role || 'student',
+              profile
+            }
+            setUser(userObj)
+            localStorage.setItem('campus-connect-user', JSON.stringify(userObj))
+          }
+        } catch (error) {
+          console.error('Auth initialization error:', error)
+        } finally {
+          setLoading(false)
+          clearTimeout(loadingTimeout)
         }
       }
       
@@ -40,30 +72,50 @@ export function AuthProvider({ children }) {
       
       try {
         const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-          setUser(session?.user ?? null)
+          if (session?.user) {
+            // Update localStorage when auth state changes
+            const savedUser = localStorage.getItem('campus-connect-user')
+            if (savedUser) {
+              setUser(JSON.parse(savedUser))
+            }
+          } else {
+            setUser(null)
+            localStorage.removeItem('campus-connect-user')
+          }
         })
         
         return () => {
+          clearTimeout(loadingTimeout)
           if (subscription && typeof subscription.unsubscribe === 'function') {
             subscription.unsubscribe()
           }
         }
       } catch (error) {
         console.error('Failed to set up auth state change listener:', error)
-        return () => {} // Return empty cleanup function
+        setLoading(false)
+        clearTimeout(loadingTimeout)
+        return () => {
+          clearTimeout(loadingTimeout)
+        }
       }
     } else {
       // Mock authentication - check localStorage
       const savedUser = localStorage.getItem('campus-connect-user')
       if (savedUser) {
         try {
-          setUser(JSON.parse(savedUser))
+          const parsedUser = JSON.parse(savedUser)
+          console.log('Restored user from localStorage (mock):', parsedUser)
+          setUser(parsedUser)
         } catch (error) {
           console.error('Failed to parse saved user:', error)
           localStorage.removeItem('campus-connect-user')
         }
       }
+      setLoading(false)
+      clearTimeout(loadingTimeout)
     }
+    
+    return () => clearTimeout(loadingTimeout)
   }, [])
 
   const login = async ({ emailOrId, password }) => {
@@ -190,6 +242,23 @@ export function AuthProvider({ children }) {
       
       db.users.push(newUser)
       
+      // Send notification to all admins about new student registration
+      if (role === 'student') {
+        const admins = db.users.filter(u => u.role === 'admin')
+        admins.forEach(admin => {
+          const notification = {
+            id: String(Date.now() + Math.random()),
+            userId: admin.id,
+            message: `👤 New student registered: ${firstName} ${lastName} (${email})`,
+            read: false,
+            createdAt: new Date().toISOString()
+          }
+          if (!db.notifications) db.notifications = []
+          db.notifications.push(notification)
+        })
+        console.log(`✅ Created ${admins.length} admin notifications for new student registration`)
+      }
+      
       // Save to localStorage
       try {
         localStorage.setItem('campus-connect-mock-db', JSON.stringify(db))
@@ -233,7 +302,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const value = { user, login, logout, register }
+  const value = { user, loading, login, logout, register }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

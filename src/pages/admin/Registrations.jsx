@@ -14,11 +14,25 @@ export default function Registrations() {
 
   const loadData = async () => {
     try {
+      console.log('📊 Loading registrations data...')
       const [eventsData, regsData, pendingData] = await Promise.all([
         listEvents(),
         listRegistrations(),
         listPendingRegistrations()
       ])
+      
+      console.log('📅 Events loaded:', eventsData?.length)
+      console.log('✅ Approved registrations loaded:', regsData?.length)
+      console.log('⏳ Pending registrations loaded:', pendingData?.length)
+      
+      // Log first pending registration in detail
+      if (pendingData && pendingData.length > 0) {
+        console.log('🔍 FIRST PENDING REGISTRATION DETAILED VIEW:')
+        console.log('Raw data:', JSON.stringify(pendingData[0], null, 2))
+        console.log('student_id:', pendingData[0].student_id)
+        console.log('profiles:', pendingData[0].profiles)
+        console.log('events:', pendingData[0].events)
+      }
       
       setEvents(eventsData)
       setRegs(regsData)
@@ -30,7 +44,7 @@ export default function Registrations() {
         setAttendance(JSON.parse(saved))
       }
     } catch (error) {
-      console.error('Error loading data:', error)
+      console.error('❌ Error loading data:', error)
     }
   }
 
@@ -98,20 +112,59 @@ export default function Registrations() {
     })
   }, [regs, selectedEvent, searchTerm, events])
 
-  const rows = useMemo(() => regs.map(r => ({
-    id: r.id,
-    eventId: r.eventId,
-    eventTitle: events.find(e => e.id === r.eventId)?.title || '—',
-    studentId: r.studentId,
-    timestamp: r.timestamp,
-  })), [regs, events])
+  const rows = useMemo(() => regs.map(r => {
+    // Extract student info from joined profiles table
+    const studentFirstName = r.profiles?.first_name || 'Unknown'
+    const studentLastName = r.profiles?.last_name || 'Student'
+    const studentCollegeId = r.profiles?.college_id || r.student_id || r.studentId || '—'
+    
+    return {
+      id: r.id,
+      eventId: r.event_id || r.eventId,
+      eventTitle: r.events?.title || events.find(e => e.id === (r.event_id || r.eventId))?.title || '—',
+      studentFirstName,
+      studentLastName,
+      studentName: `${studentFirstName} ${studentLastName}`,
+      studentId: studentCollegeId,
+      timestamp: r.created_at || r.timestamp,
+    }
+  }), [regs, events])
 
-  const pendingRows = useMemo(() => pendingRegs.map(r => ({
-    id: r.id,
-    eventTitle: events.find(e => e.id === r.eventId)?.title || '—',
-    studentId: r.studentId,
-    timestamp: r.timestamp,
-  })), [pendingRegs, events])
+  const pendingRows = useMemo(() => {
+    console.log('🔄 Mapping pending registrations:', pendingRegs)
+    return pendingRegs.map(r => {
+      console.log('📝 Processing registration:', r)
+      
+      // Extract student info from joined profiles table
+      const studentFirstName = r.profiles?.first_name || ''
+      const studentLastName = r.profiles?.last_name || ''
+      const studentEmail = r.profiles?.email || ''
+      const studentCollegeId = r.profiles?.college_id || ''
+      
+      // Create display name
+      let studentName = 'Unknown Student'
+      if (studentFirstName || studentLastName) {
+        studentName = `${studentFirstName} ${studentLastName}`.trim()
+      } else if (studentEmail) {
+        studentName = studentEmail.split('@')[0]
+      }
+      
+      // Use college ID if available, otherwise show partial UUID
+      let displayId = studentCollegeId || (r.student_id ? r.student_id.slice(0, 8) + '...' : '—')
+      
+      return {
+        id: r.id,
+        eventTitle: r.events?.title || events.find(e => e.id === r.event_id)?.title || '—',
+        studentFirstName,
+        studentLastName,
+        studentName,
+        studentId: displayId,
+        fullStudentId: r.student_id,
+        studentEmail,
+        timestamp: r.created_at || r.timestamp,
+      }
+    })
+  }, [pendingRegs, events])
 
   // Calculate stats
   const totalAttended = Object.values(attendance).filter(Boolean).length
@@ -160,35 +213,35 @@ export default function Registrations() {
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="text-left px-3 py-2">ID</th>
                   <th className="text-left px-3 py-2">Event</th>
-                  <th className="text-left px-3 py-2">Student</th>
-                  <th className="text-left px-3 py-2">Time</th>
+                  <th className="text-left px-3 py-2">Student Name</th>
+                  <th className="text-left px-3 py-2">Student ID</th>
+                  <th className="text-left px-3 py-2">Requested At</th>
                   <th className="text-left px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {pendingRows.map(r => (
-                  <tr key={r.id}>
-                    <td className="px-3 py-2">{r.id}</td>
-                    <td className="px-3 py-2">{r.eventTitle}</td>
-                    <td className="px-3 py-2">{r.studentId}</td>
-                    <td className="px-3 py-2">{new Date(r.timestamp).toLocaleString()}</td>
+                  <tr key={r.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium">{r.eventTitle}</td>
+                    <td className="px-3 py-2">{r.studentName}</td>
+                    <td className="px-3 py-2 text-gray-600">{r.studentId}</td>
+                    <td className="px-3 py-2 text-gray-600">{new Date(r.timestamp).toLocaleString()}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleApprove(r.id)}
                           disabled={loading}
-                          className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded disabled:opacity-50"
+                          className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded disabled:opacity-50 transition-colors"
                         >
-                          Approve
+                          ✓ Approve
                         </button>
                         <button
                           onClick={() => handleReject(r.id)}
                           disabled={loading}
-                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded disabled:opacity-50"
+                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded disabled:opacity-50 transition-colors"
                         >
-                          Reject
+                          ✗ Reject
                         </button>
                       </div>
                     </td>
@@ -250,6 +303,7 @@ export default function Registrations() {
               <thead className="bg-gray-50 text-gray-700">
                 <tr>
                   <th className="text-left px-3 py-2">Event</th>
+                  <th className="text-left px-3 py-2">Student Name</th>
                   <th className="text-left px-3 py-2">Student ID</th>
                   <th className="text-left px-3 py-2">Registered At</th>
                   <th className="text-left px-3 py-2">Status</th>
@@ -257,30 +311,35 @@ export default function Registrations() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredRegs.map(r => (
-                  <tr key={r.id} className={attendance[r.id] ? 'bg-green-50' : ''}>
-                    <td className="px-3 py-2 font-medium">
-                      {events.find(e => e.id === r.eventId)?.title || '—'}
-                    </td>
-                    <td className="px-3 py-2">{r.studentId}</td>
-                    <td className="px-3 py-2">{new Date(r.timestamp).toLocaleString()}</td>
-                    <td className="px-3 py-2">
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">Approved</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={() => toggleAttendance(r.id)}
-                        className={`px-3 py-1 text-xs rounded font-medium ${
-                          attendance[r.id]
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                      >
-                        {attendance[r.id] ? '✓ Present' : 'Mark Present'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredRegs.map(r => {
+                  // Find matching row data with student info
+                  const rowData = rows.find(row => row.id === r.id) || {}
+                  return (
+                    <tr key={r.id} className={attendance[r.id] ? 'bg-green-50' : ''}>
+                      <td className="px-3 py-2 font-medium">
+                        {rowData.eventTitle || events.find(e => e.id === r.eventId)?.title || '—'}
+                      </td>
+                      <td className="px-3 py-2">{rowData.studentName || 'Unknown Student'}</td>
+                      <td className="px-3 py-2 text-gray-600">{rowData.studentId || r.studentId}</td>
+                      <td className="px-3 py-2 text-gray-600">{new Date(rowData.timestamp || r.timestamp).toLocaleString()}</td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">Approved</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          onClick={() => toggleAttendance(r.id)}
+                          className={`px-3 py-1 text-xs rounded font-medium ${
+                            attendance[r.id]
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          {attendance[r.id] ? '✓ Present' : 'Mark Present'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

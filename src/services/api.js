@@ -124,7 +124,7 @@ export function createEvent(e) {
       const notification = {
         id: uid(),
         userId: student.id,
-        message: `New event created: ${newE.title} at ${newE.venue} on ${new Date(newE.start).toLocaleDateString()}`,
+        message: `🎉 New Event: ${newE.title} on ${new Date(newE.start).toLocaleDateString()} at ${newE.venue}`,
         read: false,
         createdAt: new Date().toISOString()
       }
@@ -134,7 +134,9 @@ export function createEvent(e) {
     // Save to localStorage
     saveDb()
     
-    console.log(`Created ${students.length} notifications for new event: ${newE.title}`)
+    console.log(`✅ Created ${students.length} notifications for new event: ${newE.title}`)
+    
+    return Promise.resolve(newE)
   } catch (error) {
     console.error('Error creating event:', error)
     return Promise.reject(new Error(`Failed to create event: ${error.message}`))
@@ -369,8 +371,9 @@ export function createAnnouncement({ title, message, type, targetAudience, event
   if (targetAudience === 'all' || targetAudience === 'students') {
     const students = db.users.filter(u => u.role === 'student')
     students.forEach(student => {
-      pushNotification(student.id, `${title}: ${message}`)
+      pushNotification(student.id, `📢 Announcement: ${title} - ${message}`)
     })
+    console.log(`✅ Created ${students.length} notifications for announcement: ${title}`)
   }
   
   saveDb()

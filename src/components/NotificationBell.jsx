@@ -8,15 +8,25 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
+  const loadNotifications = async () => {
+    if (user?.id) {
+      console.log('🔔 Fetching notifications for user:', user.id, 'Role:', user.role || user.user_metadata?.role)
+      const n = await listNotifications(user.id)
+      console.log('📬 Received notifications:', n?.length || 0, n)
+      setNotifications(n || [])
+      const unread = (n || []).filter(notification => !notification.read).length
+      setUnreadCount(unread)
+      console.log('📊 Unread count:', unread)
+    } else {
+      console.log('⚠️ No user ID available for notifications')
+    }
+  }
+
   useEffect(() => {
     let alive = true
     const load = async () => {
-      if (user?.id) {
-        const n = await listNotifications(user.id)
-        if (alive) {
-          setNotifications(n)
-          setUnreadCount(n.filter(notification => !notification.read).length)
-        }
+      if (alive) {
+        await loadNotifications()
       }
     }
     load()
@@ -85,14 +95,23 @@ export default function NotificationBell() {
             {/* Header */}
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Notifications</h3>
-              {unreadCount > 0 && (
+              <div className="flex items-center gap-2">
                 <button 
-                  onClick={markAllRead}
-                  className="text-sm text-brand-600 hover:text-brand-700 font-medium"
+                  onClick={loadNotifications}
+                  className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+                  title="Refresh notifications"
                 >
-                  Mark all read
+                  🔄
                 </button>
-              )}
+                {unreadCount > 0 && (
+                  <button 
+                    onClick={markAllRead}
+                    className="text-sm text-brand-600 hover:text-brand-700 font-medium"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Notifications List */}
@@ -119,7 +138,7 @@ export default function NotificationBell() {
                             {notification.message}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            {new Date(notification.createdAt).toLocaleString()}
+                            {new Date(notification.created_at || notification.createdAt).toLocaleString()}
                           </p>
                         </div>
                         {!notification.read && (
